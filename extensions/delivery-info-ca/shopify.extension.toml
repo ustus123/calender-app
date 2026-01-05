@@ -1,0 +1,33 @@
+api_version = "2025-10"
+
+[[extensions]]
+name = "delivery-info-ca"
+handle = "delivery-info-ca"
+
+uid = "b9e8dc70-ad77-baf8-e38d-300afb025f32e54ffac0"
+
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.jsx"
+target = "customer-account.order-status.block.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = false
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "delivery_date"
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "delivery_time"
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "delivery_placement"
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "delivery_invalid_reason"

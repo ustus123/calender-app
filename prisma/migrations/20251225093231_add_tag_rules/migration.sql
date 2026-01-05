@@ -1,0 +1,53 @@
+-- RedefineTables
+PRAGMA defer_foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
+CREATE TABLE "new_DeliverySettings" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "shop" TEXT NOT NULL,
+    "leadTimeDays" INTEGER NOT NULL DEFAULT 1,
+    "rangeDays" INTEGER NOT NULL DEFAULT 30,
+    "cutoffTime" TEXT NOT NULL DEFAULT '',
+    "carrierPreset" TEXT NOT NULL DEFAULT 'yamato',
+    "timeSlotsJson" TEXT NOT NULL DEFAULT '[]',
+    "holidaysJson" TEXT NOT NULL DEFAULT '[]',
+    "blackoutJson" TEXT NOT NULL DEFAULT '[]',
+    "showDate" BOOLEAN NOT NULL DEFAULT true,
+    "showTime" BOOLEAN NOT NULL DEFAULT true,
+    "showPlacement" BOOLEAN NOT NULL DEFAULT true,
+    "requireDate" BOOLEAN NOT NULL DEFAULT true,
+    "requireTime" BOOLEAN NOT NULL DEFAULT false,
+    "placementsJson" TEXT NOT NULL DEFAULT '[]',
+    "placementRequired" BOOLEAN NOT NULL DEFAULT false,
+    "noticeText" TEXT NOT NULL DEFAULT '',
+    "attrDateName" TEXT NOT NULL DEFAULT 'delivery_date',
+    "attrTimeName" TEXT NOT NULL DEFAULT 'delivery_time',
+    "attrPlacementName" TEXT NOT NULL DEFAULT 'delivery_placement',
+    "denyProductTag" TEXT NOT NULL DEFAULT 'no_delivery_datetime',
+    "denyProductTagsJson" TEXT NOT NULL DEFAULT '[]',
+    "tagOverridesJson" TEXT NOT NULL DEFAULT '[]',
+    "installMode" TEXT NOT NULL DEFAULT 'auto',
+    "installElementsJson" TEXT NOT NULL DEFAULT '[]',
+    "saveToOrderMetafields" BOOLEAN NOT NULL DEFAULT false,
+    "metafieldNamespace" TEXT NOT NULL DEFAULT 'custom',
+    "metafieldDateKey" TEXT NOT NULL DEFAULT 'delivery_date',
+    "metafieldTimeKey" TEXT NOT NULL DEFAULT 'delivery_time',
+    "metafieldPlacementKey" TEXT NOT NULL DEFAULT 'delivery_placement',
+    "calendarUiMode" TEXT NOT NULL DEFAULT 'popup',
+    "calendarStartWeek" TEXT NOT NULL DEFAULT 'sun',
+    "calendarUiJson" TEXT NOT NULL DEFAULT '{}',
+    "calDisabledBg" TEXT NOT NULL DEFAULT '#f1f2f3',
+    "calHolidayBg" TEXT NOT NULL DEFAULT '#ffe7e7',
+    "calBlackoutBg" TEXT NOT NULL DEFAULT '#fff2cc',
+    "calDisabledText" TEXT NOT NULL DEFAULT '#6d7175',
+    "calAccent" TEXT NOT NULL DEFAULT '#111827',
+    "calSelectedBg" TEXT NOT NULL DEFAULT '#111827',
+    "calSelectedText" TEXT NOT NULL DEFAULT '#ffffff',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+INSERT INTO "new_DeliverySettings" ("attrDateName", "attrPlacementName", "attrTimeName", "blackoutJson", "calAccent", "calBlackoutBg", "calDisabledBg", "calDisabledText", "calHolidayBg", "calSelectedBg", "calSelectedText", "calendarStartWeek", "calendarUiJson", "calendarUiMode", "carrierPreset", "createdAt", "cutoffTime", "denyProductTag", "holidaysJson", "id", "installElementsJson", "installMode", "leadTimeDays", "metafieldDateKey", "metafieldNamespace", "metafieldPlacementKey", "metafieldTimeKey", "noticeText", "placementRequired", "placementsJson", "rangeDays", "requireDate", "requireTime", "saveToOrderMetafields", "shop", "showDate", "showPlacement", "showTime", "timeSlotsJson", "updatedAt") SELECT "attrDateName", "attrPlacementName", "attrTimeName", "blackoutJson", "calAccent", "calBlackoutBg", "calDisabledBg", "calDisabledText", "calHolidayBg", "calSelectedBg", "calSelectedText", "calendarStartWeek", "calendarUiJson", "calendarUiMode", "carrierPreset", "createdAt", "cutoffTime", "denyProductTag", "holidaysJson", "id", "installElementsJson", "installMode", "leadTimeDays", "metafieldDateKey", "metafieldNamespace", "metafieldPlacementKey", "metafieldTimeKey", "noticeText", "placementRequired", "placementsJson", "rangeDays", "requireDate", "requireTime", "saveToOrderMetafields", "shop", "showDate", "showPlacement", "showTime", "timeSlotsJson", "updatedAt" FROM "DeliverySettings";
+DROP TABLE "DeliverySettings";
+ALTER TABLE "new_DeliverySettings" RENAME TO "DeliverySettings";
+CREATE UNIQUE INDEX "DeliverySettings_shop_key" ON "DeliverySettings"("shop");
+PRAGMA foreign_keys=ON;
+PRAGMA defer_foreign_keys=OFF;

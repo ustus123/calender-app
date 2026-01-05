@@ -1,0 +1,43 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "57f963f3fa680e618bfb75a444f88ab9"
+name = "calender-app"
+
+# ✅ devではCLIが自動更新する想定。公開/審査時は実URLにする
+application_url = "https://example.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-10"
+
+  # --- 通常webhooks（既存） ---
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  # --- ✅ Privacy law compliance（必須） ---
+  # ここがポイント：topicsではなく compliance_topics
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/webhooks/compliance"
+
+[access_scopes]
+scopes = "write_products,read_orders,write_orders,write_app_proxy"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://example.com/api/auth"
+]
+
+[app_proxy]
+prefix = "apps"
+subpath = "delivery-date"
+url = "/apps/delivery-date"

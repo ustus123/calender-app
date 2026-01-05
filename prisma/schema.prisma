@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model DeliverySettings {
+  id   String @id @default(cuid())
+  shop String @unique
+
+  // --- 配送希望日時 ---
+  leadTimeDays  Int    @default(1)
+  rangeDays     Int    @default(30)
+  cutoffTime    String @default("")
+  carrierPreset String @default("yamato") // yamato | sagawa | custom
+  timeSlotsJson String @default("[]")
+
+  // --- 休日/不可日 ---
+  holidaysJson String @default("[]")
+  blackoutJson String @default("[]")
+
+  // --- 表示（必須とは別軸） ---
+  showDate      Boolean @default(true)
+  showTime      Boolean @default(true)
+  showPlacement Boolean @default(true)
+
+  // --- 必須化 ---
+  requireDate Boolean @default(true)
+  requireTime Boolean @default(false)
+
+  // --- 置き配（任意） ---
+  placementsJson     String  @default("[]")
+  placementRequired  Boolean @default(false)
+
+  // --- 注意文言 ---
+  noticeText String @default("")
+
+  // --- 取り込み設定（カート属性名） ---
+  attrDateName      String @default("delivery_date")
+  attrTimeName      String @default("delivery_time")
+  attrPlacementName String @default("delivery_placement")
+
+  // --- 商品グループ管理（既存：後方互換のため残す） ---
+  denyProductTag String @default("no_delivery_datetime")
+
+  // =========================================================
+  // ✅ 追加：タグ条件（複数deny / タグ別override）
+  // =========================================================
+
+  /// 日時指定を禁止する商品タグ（複数）
+  /// 例: ["no_delivery_datetime","frozen","large_item"]
+  /// 空なら denyProductTag をフォールバックで使う想定
+  denyProductTagsJson String @default("[]")
+
+  /// タグ別の上書きルール（配列、上から優先）
+  /// 例:
+  /// [
+  ///   {
+  ///     "tag": "made_to_order",
+  ///     "override": { "leadTimeDays": 14, "rangeDays": 60 }
+  ///   },
+  ///   {
+  ///     "tag": "frozen",
+  ///     "override": { "showTime": true, "requireTime": true, "timeSlots": ["午前中","14-16"] }
+  ///   }
+  /// ]
+  tagOverridesJson String @default("[]")
+
+  // --- 簡単インストール ---
+  installMode         String @default("auto")
+  installElementsJson String @default("[]")
+
+  // --- 注文メタフィールド保存（任意） ---
+  saveToOrderMetafields Boolean @default(false)
+  metafieldNamespace    String  @default("custom")
+  metafieldDateKey      String  @default("delivery_date")
+  metafieldTimeKey      String  @default("delivery_time")
+  metafieldPlacementKey String  @default("delivery_placement")
+
+  // ===== カレンダーUI（管理画面で設定）=====
+  calendarUiMode      String @default("popup") // "popup" | "inline"
+  calendarStartWeek   String @default("sun")   // "sun" | "mon"
+  calendarUiJson      String @default("{}")
+
+  // ===== カレンダー色（管理画面で設定）=====
+  calDisabledBg    String @default("#f1f2f3")   // 範囲外など一般無効
+  calHolidayBg     String @default("#ffe7e7")   // 休日
+  calBlackoutBg    String @default("#fff2cc")   // お届け不可日
+  calDisabledText  String @default("#6d7175")   // 無効日の文字色
+
+  calAccent        String @default("#111827")   // アクセント
+  calSelectedBg    String @default("#111827")   // 選択日の背景
+  calSelectedText  String @default("#ffffff")   // 選択日の文字
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DeliverySupportTicket {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  email     String
+  message   String
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop, createdAt])
+}

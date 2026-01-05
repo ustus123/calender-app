@@ -1,0 +1,296 @@
+{% comment %}
+  Delivery selector (UI customizable)
+  - Operational settings: App Proxy (remote)
+  - UI settings: Theme editor (this schema)  ※見た目の微調整だけ
+  - Calendar UI: ALWAYS custom (native disabled)
+{% endcomment %}
+
+{%- assign bg = block.settings.bg_color -%}
+{%- assign text = block.settings.text_color -%}
+{%- assign label = block.settings.label_color -%}
+{%- assign border = block.settings.border_color -%}
+{%- assign focus = block.settings.focus_color -%}
+{%- assign notice = block.settings.notice_color -%}
+{%- assign error = block.settings.error_color -%}
+
+{%- assign radius = block.settings.radius_px | default: 10 -%}
+{%- assign border_w = block.settings.border_width_px | default: 1 -%}
+{%- assign font_size = block.settings.font_size_px | default: 16 -%}
+{%- assign field_h = block.settings.field_height_px | default: 44 -%}
+{%- assign gap = block.settings.gap_px | default: 10 -%}
+{%- assign placement_rows = block.settings.placement_rows | default: 4 -%}
+{%- assign max_width = block.settings.max_width_px | default: 520 -%}
+
+<div
+  class="delivery-selector"
+  data-attr-date="delivery_date"
+  data-attr-time="delivery_time"
+  data-attr-placement="delivery_placement"
+
+  data-show-date="true"
+  data-show-time="true"
+  data-show-placement="true"
+
+  data-required-date="true"
+  data-required-time="false"
+  data-required-placement="false"
+
+  data-lead-time-days="1"
+  data-range-days="30"
+  data-cutoff-time="NONE"
+  data-time-slots="NONE"
+  data-notice-text="NONE"
+
+  style="
+    --ds-bg: {{ bg }};
+    --ds-text: {{ text }};
+    --ds-label: {{ label }};
+    --ds-border: {{ border }};
+    --ds-focus: {{ focus }};
+    --ds-notice: {{ notice }};
+    --ds-error: {{ error }};
+    --ds-radius: {{ radius }}px;
+    --ds-border-w: {{ border_w }}px;
+    --ds-font: {{ font_size }}px;
+    --ds-field-h: {{ field_h }}px;
+    --ds-gap: {{ gap }}px;
+    --ds-maxw: {{ max_width }}px;
+
+    /* calendar: defaults (管理画面の値でJSが上書きする) */
+    --cal-bg: #ffffff;
+    --cal-text: #202223;
+    --cal-border: #c9cccf;
+    --cal-shadow: 0 12px 24px rgba(0,0,0,0.12);
+    --cal-radius: 14px;
+    --cal-cell: 38px;
+
+    --cal-header-bg: #f6f6f7;
+    --cal-header-text: #202223;
+
+    --cal-accent: #005bd3;
+    --cal-selected-bg: #005bd3;
+    --cal-selected-text: #ffffff;
+    --cal-disabled-text: #8c9196;
+
+    /* ✅ 管理画面で選べる「今日の枠色」(JSが上書き) */
+    --cal-today-ring: #00a47c;
+
+    /* ✅ 管理画面で選べる「無効日 背景色」(JSが上書き) */
+    --cal-disabled-bg: rgba(0,0,0,0.04);
+    --cal-blackout-bg: #ffe7cc;
+  "
+>
+  <style>
+    .delivery-selector { background: var(--ds-bg); color: var(--ds-text); border-radius: var(--ds-radius); padding: calc(var(--ds-gap) * 1.2); max-width: var(--ds-maxw); }
+    .delivery-selector * { box-sizing: border-box; }
+    .delivery-selector .ds-row { margin-bottom: var(--ds-gap); }
+    .delivery-selector .ds-label { display:block; font-weight:600; margin-bottom:6px; color: var(--ds-label); font-size: var(--ds-font); line-height:1.2; }
+    .delivery-selector .ds-field { width:100%; max-width:100%; font-size: var(--ds-font); color: var(--ds-text); border: var(--ds-border-w) solid var(--ds-border); border-radius: var(--ds-radius); padding: 10px 12px; background:#fff; }
+    .delivery-selector input.ds-field, .delivery-selector select.ds-field { height: var(--ds-field-h); }
+    .delivery-selector textarea.ds-field { min-height: calc(var(--ds-field-h) * 1.2); resize: vertical; line-height:1.5; }
+    .delivery-selector .ds-field:focus { outline:none; border-color: var(--ds-focus); box-shadow: 0 0 0 3px rgba(0,0,0,0.06); }
+    .delivery-selector .ds-help { margin:6px 0 0; color: var(--ds-notice); font-size: calc(var(--ds-font) - 2px); line-height:1.4; }
+    .delivery-selector .ds-error { margin:6px 0 0; color: var(--ds-error); font-size: calc(var(--ds-font) - 2px); line-height:1.4; }
+    .delivery-selector .ds-title { margin:0 0 var(--ds-gap); font-size: calc(var(--ds-font) + 2px); font-weight:700; color: var(--ds-text); }
+
+    /* Custom calendar UI */
+    .delivery-selector .cal-wrap { position: relative; }
+
+    .delivery-selector .cal-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 9999;
+      width: 320px;
+      max-width: min(92vw, 360px);
+      background: var(--cal-bg);
+      color: var(--cal-text);
+      border: 1px solid var(--cal-border);
+      border-radius: var(--cal-radius);
+      box-shadow: var(--cal-shadow);
+      padding: 10px;
+    }
+    .delivery-selector .cal-popover[hidden] { display:none; }
+
+    .delivery-selector .cal-inline {
+      position: static;
+      width: 100%;
+      max-width: 360px;
+      margin-top: 10px;
+    }
+
+    .delivery-selector .cal-header {
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: calc(var(--cal-radius) - 2px);
+      background: var(--cal-header-bg);
+      color: var(--cal-header-text);
+      margin-bottom: 8px;
+    }
+    .delivery-selector .cal-btn {
+      border: 1px solid var(--cal-border);
+      background: transparent;
+      color: inherit;
+      border-radius: 10px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .delivery-selector .cal-btn:hover { border-color: var(--cal-accent); }
+    .delivery-selector .cal-title { font-weight: 700; font-size: 14px; }
+
+    .delivery-selector .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, var(--cal-cell));
+      justify-content: space-between;
+      gap: 6px;
+      padding: 6px 2px 2px;
+    }
+    .delivery-selector .cal-dow {
+      text-align:center;
+      font-size: 12px;
+      opacity: 0.85;
+      padding: 2px 0 6px;
+    }
+    .delivery-selector .cal-day {
+      width: var(--cal-cell);
+      height: var(--cal-cell);
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 13px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      user-select:none;
+    }
+    .delivery-selector .cal-day:hover { border-color: var(--cal-accent); }
+
+    .delivery-selector .cal-day[data-selected="true"] {
+      background: var(--cal-selected-bg);
+      color: var(--cal-selected-text);
+      border-color: var(--cal-selected-bg);
+    }
+
+    /* ✅ 無効日（= お届け不可日/範囲外）だけ色を付ける。休日はここでは無効にしない */
+    .delivery-selector .cal-day[data-disabled="true"] {
+      color: var(--cal-disabled-text);
+      cursor: not-allowed;
+      opacity: 0.80;
+      background: var(--cal-disabled-bg);
+    }
+    .delivery-selector .cal-day[data-disabled-type="blackout"] {
+      background: var(--cal-blackout-bg, var(--cal-disabled-bg));
+    }
+    .delivery-selector .cal-day[data-disabled="true"]:hover { border-color: transparent; }
+
+    .delivery-selector .cal-day[data-today="true"] {
+      box-shadow: 0 0 0 2px var(--cal-today-ring) inset;
+    }
+
+    .delivery-selector .cal-legend {
+      margin-top: 8px;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+  </style>
+
+  {%- if block.settings.show_title -%}
+    <p class="ds-title">{{ block.settings.title_text }}</p>
+  {%- endif -%}
+
+  <div data-date-row class="ds-row">
+    <label class="ds-label">{{ block.settings.label_date }}</label>
+
+    <div class="cal-wrap">
+      <input
+        type="text"
+        data-date-ui
+        class="ds-field"
+        placeholder="{{ block.settings.date_placeholder }}"
+        readonly
+        autocomplete="off"
+      />
+
+      <input
+        type="date"
+        data-date
+        class="ds-field"
+        style="position:absolute; left:-99999px; width:1px; height:1px; opacity:0;"
+        tabindex="-1"
+        aria-hidden="true"
+      />
+
+      <div data-calendar class="cal-popover" hidden></div>
+    </div>
+
+    <p data-error-date hidden class="ds-error"></p>
+  </div>
+
+  <div data-time-row class="ds-row">
+    <label class="ds-label">{{ block.settings.label_time }}</label>
+    <select data-time class="ds-field">
+      <option value="">選択してください</option>
+    </select>
+    <p data-error-time hidden class="ds-error"></p>
+  </div>
+
+  <div data-placement-row class="ds-row" style="display:none;">
+    <label class="ds-label">{{ block.settings.label_placement }}</label>
+    <textarea
+      data-placement
+      class="ds-field"
+      rows="{{ placement_rows }}"
+      placeholder="{{ block.settings.placeholder_placement }}"
+      autocomplete="off"
+    ></textarea>
+    <p data-error-placement hidden class="ds-error"></p>
+  </div>
+
+  <p data-notice class="ds-help"></p>
+  <p data-error-global hidden class="ds-error"></p>
+</div>
+
+<script src="{{ 'delivery.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "配送日時指定",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "show_title", "label": "タイトルを表示", "default": false },
+    { "type": "text", "id": "title_text", "label": "タイトル文言", "default": "配送日時指定" },
+
+    { "type": "header", "content": "ラベル文言" },
+    { "type": "text", "id": "label_date", "label": "配送日ラベル", "default": "配送希望日" },
+    { "type": "text", "id": "label_time", "label": "配送時間ラベル", "default": "配送希望時間" },
+    { "type": "text", "id": "label_placement", "label": "置き配ラベル", "default": "置き配（自由入力）" },
+    { "type": "text", "id": "placeholder_placement", "label": "置き配プレースホルダー", "default": "例）玄関前、宅配ボックス、管理人預け など" },
+    { "type": "text", "id": "date_placeholder", "label": "日付未選択時の表示", "default": "日付を選択してください" },
+
+    { "type": "header", "content": "カラー（全体）" },
+    { "type": "color", "id": "bg_color", "label": "背景色", "default": "#ffffff" },
+    { "type": "color", "id": "text_color", "label": "文字色", "default": "#202223" },
+    { "type": "color", "id": "label_color", "label": "ラベル色", "default": "#202223" },
+    { "type": "color", "id": "border_color", "label": "枠線色", "default": "#c9cccf" },
+    { "type": "color", "id": "focus_color", "label": "フォーカス色", "default": "#005bd3" },
+    { "type": "color", "id": "notice_color", "label": "注意文言色", "default": "#6d7175" },
+    { "type": "color", "id": "error_color", "label": "エラー色", "default": "#d72c0d" },
+
+    { "type": "header", "content": "サイズ/レイアウト（全体）" },
+    { "type": "range", "id": "max_width_px", "min": 260, "max": 900, "step": 10, "unit": "px", "label": "最大幅", "default": 520 },
+    { "type": "range", "id": "radius_px", "min": 0, "max": 24, "step": 1, "unit": "px", "label": "角丸", "default": 10 },
+    { "type": "range", "id": "border_width_px", "min": 0, "max": 4, "step": 1, "unit": "px", "label": "枠線の太さ", "default": 1 },
+    { "type": "range", "id": "font_size_px", "min": 12, "max": 20, "step": 1, "unit": "px", "label": "フォントサイズ", "default": 16 },
+    { "type": "range", "id": "field_height_px", "min": 36, "max": 60, "step": 1, "unit": "px", "label": "フィールド高さ（select）", "default": 44 },
+    { "type": "range", "id": "gap_px", "min": 6, "max": 24, "step": 1, "unit": "px", "label": "間隔（余白）", "default": 10 },
+    { "type": "range", "id": "placement_rows", "min": 2, "max": 12, "step": 1, "label": "置き配入力の行数", "default": 4 }
+  ]
+}
+{% endschema %}
