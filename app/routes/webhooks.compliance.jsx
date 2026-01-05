@@ -11,12 +11,16 @@ function json(body, { status = 200, headers } = {}) {
   });
 }
 
-function verifyHmac(rawBody, hmacHeader, secret) {
+/**
+ * Shopify Webhook HMAC 検証（bytesベース）
+ * header: X-Shopify-Hmac-Sha256 = base64(HMAC_SHA256(raw_body, api_secret))
+ */
+function verifyShopifyWebhookHmac(rawBodyBuffer, hmacHeader, secret) {
   if (!secret || !hmacHeader) return false;
 
   const digest = crypto
     .createHmac("sha256", secret)
-    .update(rawBody, "utf8")
+    .update(rawBodyBuffer)
     .digest("base64");
 
   const a = Buffer.from(digest, "utf8");
@@ -27,29 +31,36 @@ function verifyHmac(rawBody, hmacHeader, secret) {
 }
 
 export async function action({ request }) {
-  const rawBody = await request.text();
+  // Shopify は raw body で署名するので、必ず arrayBuffer() で「生のbytes」を取る
+  const rawBodyBuffer = Buffer.from(await request.arrayBuffer());
 
   const hmacHeader =
     request.headers.get("X-Shopify-Hmac-Sha256") ||
     request.headers.get("X-Shopify-Hmac-SHA256") ||
     "";
 
+  // ここは「アプリの API secret（client secret）」です
   const secret = process.env.SHOPIFY_API_SECRET || "";
-  const ok = verifyHmac(rawBody, hmacHeader, secret);
 
-  // 無効な署名は401で拒否（Shopify要件）
-  if (!ok) return json({ ok: false }, { status: 401 });
+  const ok = verifyShopifyWebhookHmac(rawBodyBuffer, hmacHeader, secret);
 
+  // ✅ Shopify要件：HMAC が無効なら 401 を返す
+  if (!ok) return json({ ok: false, reason: "invalid_hmac" }, { status: 401 });
+
+  // compliance webhook は受領できれば 200 でOK（データが無いなら何もしなくてよい）
+  // ※ShopifyはPOSTで呼びます
   const topic =
     request.headers.get("X-Shopify-Topic") ||
     request.headers.get("x-shopify-topic") ||
     "";
 
-  // 最小実装：保持データが無いなら200でOK
   return json({ ok: true, topic }, { status: 200 });
 }
 
-// 任意：GETで叩かれても405にならないようにする（確認用）
+/**
+ * Shopifyのチェック/人のアクセスで GET が来ても 200 を返すと誤判定の元になるので、
+ * 401 を返して「署名が必要」を明確にしておく（安全側）
+ */
 export async function loader() {
-  return json({ ok: true }, { status: 200 });
+  return json({ ok: false, reason: "hmac_required" }, { status: 401 });
 }
