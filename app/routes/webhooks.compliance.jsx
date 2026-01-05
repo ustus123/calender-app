@@ -1,41 +1,55 @@
-import { json } from "@remix-run/node";
-import { verifyShopifyWebhookHmac } from "../utils/verifyShopifyWebhook.server.js";
+// app/routes/webhooks.compliance.jsx
+import crypto from "crypto";
 
-export const action = async ({ request }) => {
-  // Shopifyは raw body で署名するので text() で取得
+function json(body, { status = 200, headers } = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...(headers || {}),
+    },
+  });
+}
+
+function verifyHmac(rawBody, hmacHeader, secret) {
+  if (!secret || !hmacHeader) return false;
+
+  const digest = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("base64");
+
+  const a = Buffer.from(digest, "utf8");
+  const b = Buffer.from(hmacHeader, "utf8");
+  if (a.length !== b.length) return false;
+
+  return crypto.timingSafeEqual(a, b);
+}
+
+export async function action({ request }) {
   const rawBody = await request.text();
 
-  const hmacHeader = request.headers.get("X-Shopify-Hmac-Sha256");
-  const secret = process.env.SHOPIFY_API_SECRET;
+  const hmacHeader =
+    request.headers.get("X-Shopify-Hmac-Sha256") ||
+    request.headers.get("X-Shopify-Hmac-SHA256") ||
+    "";
 
-  const v = verifyShopifyWebhookHmac({ rawBody, hmacHeader, secret });
-  if (!v.ok) {
-    return json({ ok: false, reason: v.reason }, { status: 401 });
-  }
+  const secret = process.env.SHOPIFY_API_SECRET || "";
+  const ok = verifyHmac(rawBody, hmacHeader, secret);
+
+  // 無効な署名は401で拒否（Shopify要件）
+  if (!ok) return json({ ok: false }, { status: 401 });
 
   const topic =
     request.headers.get("X-Shopify-Topic") ||
     request.headers.get("x-shopify-topic") ||
     "";
 
-  // 必要なら payload を使う（今回は最小実装）
-  // const payload = JSON.parse(rawBody);
+  // 最小実装：保持データが無いなら200でOK
+  return json({ ok: true, topic }, { status: 200 });
+}
 
-  switch (topic) {
-    case "customers/data_request":
-      // アプリが顧客の個人データを保持していないなら 200 でOK
-      return json({ ok: true }, { status: 200 });
-
-    case "customers/redact":
-      // 顧客データ削除：保持してないなら 200 でOK
-      return json({ ok: true }, { status: 200 });
-
-    case "shop/redact":
-      // ストアデータ削除：shop単位の設定等をDB保存してるならここで削除
-      return json({ ok: true }, { status: 200 });
-
-    default:
-      // 想定外でも200返す（再送ループ回避）
-      return json({ ok: true, ignored: true, topic }, { status: 200 });
-  }
-};
+// 任意：GETで叩かれても405にならないようにする（確認用）
+export async function loader() {
+  return json({ ok: true }, { status: 200 });
+}
