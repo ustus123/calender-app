@@ -3,8 +3,8 @@
 client_id = "57f963f3fa680e618bfb75a444f88ab9"
 name = "calender-app"
 
-# ✅ devではCLIが自動更新する想定。公開/審査時は実URLにする
-application_url = "https://example.com"
+# ✅ 公開/審査時は「実在するHTTPSのURL」が必須（RenderのURL）
+application_url = "https://calender-app-47zc.onrender.com"
 embedded = true
 
 [build]
@@ -23,7 +23,6 @@ api_version = "2025-10"
   uri = "/webhooks/app/uninstalled"
 
   # --- ✅ Privacy law compliance（必須） ---
-  # ここがポイント：topicsではなく compliance_topics
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "/webhooks/compliance"
@@ -34,7 +33,7 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://example.com/api/auth"
+  "https://calender-app-47zc.onrender.com/api/auth"
 ]
 
 [app_proxy]
