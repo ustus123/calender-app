@@ -71,6 +71,42 @@ async function copyToClipboard(text) {
   }
 }
 
+function getStoreHandleFromShopDomain(shopDomain) {
+  const s = String(shopDomain || "").trim();
+  if (!s) return null;
+  return s.split(".myshopify.com")[0] || null;
+}
+
+/**
+ * ✅ ただページへ飛ばすだけ（自動追加しない）
+ */
+function buildCartEditorLink(shopDomain) {
+  if (!shopDomain) return null;
+  return `https://${shopDomain}/admin/themes/current/editor?template=cart`;
+}
+
+/**
+ * ✅ Checkout & accounts editor へのリンク（ページ別）
+ * - profileId が分かる場合： /profiles/<id>?page=...
+ * - 分からない場合： /settings/checkout/editor?page=...
+ *
+ * page: "checkout" | "order-status"（あなたのURLに合わせた値）
+ */
+function buildCheckoutEditorLink({ shopDomain, page, profileId }) {
+  const store = getStoreHandleFromShopDomain(shopDomain);
+  if (!store) return null;
+
+  const safePage = page === "order-status" ? "order-status" : page === "thank-you" ? "thank-you" : "checkout";
+
+  if (profileId && String(profileId).trim()) {
+    return `https://admin.shopify.com/store/${store}/settings/checkout/editor/profiles/${String(
+      profileId,
+    ).trim()}?page=${safePage}`;
+  }
+
+  return `https://admin.shopify.com/store/${store}/settings/checkout/editor?page=${safePage}`;
+}
+
 /** ================= UI parts ================= */
 
 function Section({ title, badge, children }) {
@@ -188,19 +224,48 @@ export const loader = async ({ request }) => {
     placementKey: attrPlacementName,
   });
 
+  // ✅ ページへ飛ばすだけのリンク
+  const cartEditorLink = buildCartEditorLink(session.shop);
+
+  // ✅ あなたの例: profiles/1791819870
+  // ここは環境変数で上書きできるようにしておく（未設定でも動く）
+  const checkoutProfileId = process.env.CHECKOUT_PROFILE_ID || "";
+
+  const thankYouEditorLink = buildCheckoutEditorLink({
+    shopDomain: session.shop,
+    page: "thank-you",
+    profileId: checkoutProfileId,
+  });
+
+  const orderStatusEditorLink = buildCheckoutEditorLink({
+    shopDomain: session.shop,
+    page: "order-status",
+    profileId: checkoutProfileId,
+  });
+
   return {
     attrDateName,
     attrTimeName,
     attrPlacementName,
     emailLiquid,
+    cartEditorLink,
+    thankYouEditorLink,
+    orderStatusEditorLink,
   };
 };
 
 /** ================= page ================= */
 
 export default function DeliveryHowtoRoute() {
-  const { attrDateName, attrTimeName, attrPlacementName, emailLiquid } =
-    useLoaderData();
+  const {
+    attrDateName,
+    attrTimeName,
+    attrPlacementName,
+    emailLiquid,
+    cartEditorLink,
+    thankYouEditorLink,
+    orderStatusEditorLink,
+  } = useLoaderData();
 
   const currentKeysLabel = useMemo(
     () => `現在の属性名：${attrDateName} / ${attrTimeName} / ${attrPlacementName}`,
@@ -233,13 +298,83 @@ export default function DeliveryHowtoRoute() {
             管理画面でルールを設定すると、ストアの配送運用に合わせて自動的に表示・制御されます。
           </Text>
 
-          <Banner status="info" title="まず最初に">
-            <List type="bullet">
-              <List.Item>
-                「基本設定」→「カレンダー設定」→「タグ条件」の順で設定するとスムーズです。
-              </List.Item>
-              <List.Item>設定変更後は、必ずカート画面で動作確認を行ってください。</List.Item>
-            </List>
+          {/* ✅ 設置導線（ページへ飛ぶだけ） */}
+          <Banner status="info" title="設置方法">
+            <BlockStack gap="300">
+              <Text as="p">以下のボタンから、設置先の編集画面を開けます。</Text>
+
+              <Divider />
+
+              {/* カート */}
+              <BlockStack gap="200">
+                <Text as="p">
+                  <strong>■ カート（テーマ）に設置</strong>
+                  <br />
+                  テーマエディタ（カートテンプレート）を開きます。
+                  追加画面内の「アプリ」から本アプリのブロックを追加し、保存（Save）してください。
+                  必要に応じて「小計（Subtotal）付近」へドラッグして配置してください。
+                </Text>
+
+                <InlineStack align="end">
+                  <Button
+                    url={cartEditorLink || undefined}
+                    external
+                    variant="primary"
+                    disabled={!cartEditorLink}
+                  >
+                    カートテンプレートを開く
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+
+              <Divider />
+
+              {/* サンクス */}
+              <BlockStack gap="200">
+                <Text as="p">
+                  <strong>■ サンクスページに設置</strong>
+                  <br />
+                  サンクスページの編集画面を開き、追加画面内の「アプリ」から本アプリのブロックを追加し、保存（Save）してください。
+                </Text>
+
+                <InlineStack align="end">
+                  <Button
+                    url={thankYouEditorLink || undefined}
+                    external
+                    disabled={!thankYouEditorLink}
+                  >
+                    サンクスページの編集画面を開く
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+
+              <Divider />
+
+              {/* 注文状況 */}
+              <BlockStack gap="200">
+                <Text as="p">
+                  <strong>■ 注文状況ページに設置</strong>
+                  <br />
+                  注文状況ページの編集画面を開き、追加画面内の「アプリ」から本アプリのブロックを追加し、保存（Save）してください。
+                </Text>
+
+                <InlineStack align="end">
+                  <Button
+                    url={orderStatusEditorLink || undefined}
+                    external
+                    disabled={!orderStatusEditorLink}
+                  >
+                    注文状況ページの編集画面を開く
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+
+              {!cartEditorLink || !thankYouEditorLink || !orderStatusEditorLink ? (
+                <Text as="p" tone="subdued">
+                  ※ リンクを生成できませんでした。ショップドメインの取得に失敗している可能性があります。
+                </Text>
+              ) : null}
+            </BlockStack>
           </Banner>
         </BlockStack>
       </Card>
@@ -417,7 +552,8 @@ export default function DeliveryHowtoRoute() {
           </Text>
         </BlockStack>
       </Card>
-    <Box paddingBlockEnd="800" />
-  </BlockStack>
-);
+
+      <Box paddingBlockEnd="800" />
+    </BlockStack>
+  );
 }
