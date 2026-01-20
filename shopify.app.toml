@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "57f963f3fa680e618bfb75a444f88ab9"
-name = "calender-app"
+name = "くいっく配送日時指定"
 
 # ✅ 公開/審査時は「実在するHTTPSのURL」が必須（RenderのURL）
 application_url = "https://calender-app-47zc.onrender.com"

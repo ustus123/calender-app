@@ -1,7 +1,7 @@
 api_version = "2025-10"
 
 [[extensions]]
-name = "delivery-info"
+name = "くいっく配送日時指定"
 handle = "delivery-info"
 uid = "1ea5a9db-75f7-fbea-f096-47f6bdda664298823366"
 type = "ui_extension"

@@ -21,7 +21,8 @@
   "prisma": "prisma",
   "graphql-codegen": "graphql-codegen",
   "vite": "vite",
-  "typecheck": "react-router typegen && tsc --noEmit"
+  "typecheck": "react-router typegen && tsc --noEmit",
+  "deploy:prod": "git add . && git commit -m \"deploy\" && git push && shopify app deploy"
 },
   "type": "module",
   "engines": {
