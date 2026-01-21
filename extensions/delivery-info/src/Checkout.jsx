@@ -9,8 +9,6 @@ export default function extension() {
 }
 
 function Extension() {
-  // TODO: Theme App Extension 側で保存している「属性キー名」に合わせてください
-  // 例: /cart/update.js で attributes["delivery_date"]=...
   const [deliveryDate, deliveryTime, deliveryPlacement] = useAttributeValues([
     "delivery_date",
     "delivery_time",
@@ -18,12 +16,12 @@ function Extension() {
   ]);
 
   return (
-    <s-banner heading="配送希望日時">
-      <s-stack gap="base">
-        <s-text>配送希望日：{deliveryDate ?? "未指定"}</s-text>
-        <s-text>配送希望時間：{deliveryTime ?? "未指定"}</s-text>
-        <s-text>置き配：{deliveryPlacement ?? "未指定"}</s-text>
-      </s-stack>
-    </s-banner>
+    <s-box padding="base" border="base" borderRadius="large">
+        <s-stack gap="base">
+          <s-text><s-text type="strong">配送希望日：</s-text>{deliveryDate ?? "未指定"}</s-text>
+          <s-text><s-text type="strong">配送希望時間：</s-text>{deliveryTime ?? "未指定"}</s-text>
+          <s-text><s-text type="strong">置き配：</s-text>{deliveryPlacement ?? "未指定"}</s-text>
+        </s-stack>
+    </s-box>
   );
 }
