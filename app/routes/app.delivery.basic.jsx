@@ -1,17 +1,16 @@
 // app/routes/app.delivery.basic.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useLoaderData, useSubmit, useActionData } from "react-router";
+import { redirect } from "react-router";
 import {
   Page,
   Layout,
   Card,
-  FormLayout,
   TextField,
   Checkbox,
   Banner,
   InlineStack,
   Text,
-  Divider,
   Select,
   Button,
   Box,
@@ -26,6 +25,27 @@ import {
   safeJsonArray,
   safeJsonStringify,
 } from "../models/deliverySettings.server";
+
+/**
+ * ✅ embedded app の安定化
+ * - shop はあるのに host が無い URL で深い route に来ると、OAuth直後に断続的に落ちることがある
+ * - host を shop から補完して同じURLへリダイレクトする（DB/APIは使わない）
+ */
+function ensureShopHost(request) {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+  const host = url.searchParams.get("host");
+
+  if (shop && !host) {
+    const fixed = new URL(request.url);
+    fixed.searchParams.set(
+      "host",
+      Buffer.from(`${shop}/admin`).toString("base64"),
+    );
+    return redirect(fixed.toString());
+  }
+  return null;
+}
 
 /** helpers */
 function splitLinesToArray(text) {
@@ -59,45 +79,12 @@ const CARRIER_OPTIONS = [
 ];
 
 const PRESET_TIME_SLOTS = {
-  yamato: [
-    "08:00-12:00",
-    "12:00-14:00",
-    "14:00-16:00",
-    "16:00-18:00",
-    "18:00-20:00",
-    "19:00-21:00"
-  ],
-  sagawa: [
-    "08:00-12:00",
-    "12:00-14:00",
-    "14:00-16:00",
-    "16:00-18:00",
-    "18:00-20:00",
-    "19:00-21:00"
-  ],
-  yuupack: [
-    "午前中",
-    "12:00-14:00",
-    "14:00-16:00",
-    "16:00-18:00",
-    "18:00-20:00",
-    "19:00-21:00"
-  ],
-  fukuyama: [
-    "10:00-12:00",
-    "12:00-14:00",
-    "14:00-16:00",
-    "16:00-18:00",
-    "18:00～20:00"
-  ],
-  seino: [
-    "午前",
-    "午後"
-  ],
-  nittsu: [
-    "午前中",
-    "午後"
-  ],
+  yamato: ["08:00-12:00", "12:00-14:00", "14:00-16:00", "16:00-18:00", "18:00-20:00", "19:00-21:00"],
+  sagawa: ["08:00-12:00", "12:00-14:00", "14:00-16:00", "16:00-18:00", "18:00-20:00", "19:00-21:00"],
+  yuupack: ["午前中", "12:00-14:00", "14:00-16:00", "16:00-18:00", "18:00-20:00", "19:00-21:00"],
+  fukuyama: ["10:00-12:00", "12:00-14:00", "14:00-16:00", "16:00-18:00", "18:00～20:00"],
+  seino: ["午前", "午後"],
+  nittsu: ["午前中", "午後"],
 };
 
 const CUTOFF_OPTIONS = [
@@ -128,6 +115,10 @@ function inferCutoffMode(cutoffTime) {
 }
 
 export const loader = async ({ request }) => {
+  // ✅ 追加：shop/host の補完（直リンク・更新・OAuth直後の安定化）
+  const fix = ensureShopHost(request);
+  if (fix) return fix;
+
   const { session } = await authenticate.admin(request);
   const settings = await getOrCreateDeliverySettings(session.shop);
 
@@ -141,6 +132,10 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  // action でも念のため補完（POSTでもhost欠けで落ちるのを防ぐ）
+  const fix = ensureShopHost(request);
+  if (fix) return fix;
+
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
 
@@ -184,7 +179,8 @@ export const action = async ({ request }) => {
   if (!Number.isFinite(rangeDays) || rangeDays < 1) errors.push("お届け可能期間は1以上にしてください");
   if (!CARRIER_OPTIONS.some((o) => o.value === carrierPreset)) errors.push("配送業者が不正です");
 
-  if (cutoffTimeFinal && !isValidHHMM(cutoffTimeFinal)) errors.push("締め時間は HH:mm（例 15:00）か未設定にしてください");
+  if (cutoffTimeFinal && !isValidHHMM(cutoffTimeFinal))
+    errors.push("締め時間は HH:mm（例 15:00）か未設定にしてください");
 
   if (!attrDateName) errors.push("配送日 属性名が空です");
   if (!attrTimeName) errors.push("配送時間 属性名が空です");
@@ -218,7 +214,7 @@ export const action = async ({ request }) => {
   const slotsToSave =
     carrierPreset === "custom"
       ? customTimeSlots
-      : (PRESET_TIME_SLOTS[carrierPreset] || PRESET_TIME_SLOTS.yamato || []);
+      : PRESET_TIME_SLOTS[carrierPreset] || PRESET_TIME_SLOTS.yamato || [];
 
   await updateDeliverySettings(session.shop, {
     leadTimeDays,
@@ -282,13 +278,19 @@ export default function DeliveryBasicRoute() {
 
   const [attrDateName, setAttrDateName] = useState(String(settings.attrDateName || "delivery_date"));
   const [attrTimeName, setAttrTimeName] = useState(String(settings.attrTimeName || "delivery_time"));
-  const [attrPlacementName, setAttrPlacementName] = useState(String(settings.attrPlacementName || "delivery_placement"));
+  const [attrPlacementName, setAttrPlacementName] = useState(
+    String(settings.attrPlacementName || "delivery_placement"),
+  );
 
-  const [saveToOrderMetafields, setSaveToOrderMetafields] = useState(Boolean(settings.saveToOrderMetafields ?? false));
+  const [saveToOrderMetafields, setSaveToOrderMetafields] = useState(
+    Boolean(settings.saveToOrderMetafields ?? false),
+  );
   const [metafieldNamespace, setMetafieldNamespace] = useState(String(settings.metafieldNamespace || "custom"));
   const [metafieldDateKey, setMetafieldDateKey] = useState(String(settings.metafieldDateKey || "delivery_date"));
   const [metafieldTimeKey, setMetafieldTimeKey] = useState(String(settings.metafieldTimeKey || "delivery_time"));
-  const [metafieldPlacementKey, setMetafieldPlacementKey] = useState(String(settings.metafieldPlacementKey || "delivery_placement"));
+  const [metafieldPlacementKey, setMetafieldPlacementKey] = useState(
+    String(settings.metafieldPlacementKey || "delivery_placement"),
+  );
 
   useEffect(() => {
     if (!showDate && requireDate) setRequireDate(false);
@@ -438,12 +440,26 @@ export default function DeliveryBasicRoute() {
                   <InlineStack gap="600" wrap>
                     <Checkbox label="配送日を表示" checked={showDate} onChange={setShowDate} />
                     <Checkbox label="配送時間を表示" checked={showTime} onChange={setShowTime} />
-                    <Checkbox label="置き配（自由入力）を表示" checked={showPlacement} onChange={setShowPlacement} />
+                    <Checkbox
+                      label="置き配（自由入力）を表示"
+                      checked={showPlacement}
+                      onChange={setShowPlacement}
+                    />
                   </InlineStack>
 
                   <InlineStack gap="600" wrap>
-                    <Checkbox label="配送日を必須" checked={requireDate} onChange={setRequireDate} disabled={!showDate} />
-                    <Checkbox label="配送時間を必須" checked={requireTime} onChange={setRequireTime} disabled={!showTime} />
+                    <Checkbox
+                      label="配送日を必須"
+                      checked={requireDate}
+                      onChange={setRequireDate}
+                      disabled={!showDate}
+                    />
+                    <Checkbox
+                      label="配送時間を必須"
+                      checked={requireTime}
+                      onChange={setRequireTime}
+                      disabled={!showTime}
+                    />
                   </InlineStack>
                 </BlockStack>
               </BlockStack>
@@ -485,9 +501,7 @@ export default function DeliveryBasicRoute() {
                 ) : null}
 
                 {cutoffMode === "none" ? (
-                  <Banner status="info">
-                    締め時間は未設定です（最短お届け日の繰り下げは行いません）。
-                  </Banner>
+                  <Banner status="info">締め時間は未設定です（最短お届け日の繰り下げは行いません）。</Banner>
                 ) : null}
               </BlockStack>
             </Card>
@@ -519,17 +533,18 @@ export default function DeliveryBasicRoute() {
                 <InlineStack gap="400" wrap>
                   <TextField label="配送日 属性名" value={attrDateName} onChange={setAttrDateName} autoComplete="off" />
                   <TextField label="配送時間 属性名" value={attrTimeName} onChange={setAttrTimeName} autoComplete="off" />
-                  <TextField label="置き配 属性名" value={attrPlacementName} onChange={setAttrPlacementName} autoComplete="off" />
+                  <TextField
+                    label="置き配 属性名"
+                    value={attrPlacementName}
+                    onChange={setAttrPlacementName}
+                    autoComplete="off"
+                  />
                 </InlineStack>
 
                 <Banner status="info" title="外部連携のポイント">
                   <List type="bullet">
-                    <List.Item>
-                      外部の受注管理システムが読み取る項目名に合わせたい場合は、ここで属性名を変更してください。
-                    </List.Item>
-                    <List.Item>
-                      ご利用方法ページの「メール表示」「外部連携」のコピー用コードは、この設定に合わせて自動生成されます。
-                    </List.Item>
+                    <List.Item>外部の受注管理システムが読み取る項目名に合わせたい場合は、ここで属性名を変更してください。</List.Item>
+                    <List.Item>ご利用方法ページの「メール表示」「外部連携」のコピー用コードは、この設定に合わせて自動生成されます。</List.Item>
                   </List>
                 </Banner>
               </BlockStack>
