@@ -1,3 +1,5 @@
+// app/routes/proxy.settings.ts
+// 
 import type { LoaderFunctionArgs } from "react-router";
 import crypto from "node:crypto";
 import prisma from "../db.server";

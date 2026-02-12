@@ -1,3 +1,4 @@
+// delivery.js (Review/Production)
 // @ts-nocheck
 (() => {
   const SELECTOR = ".delivery-selector";
@@ -73,7 +74,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
   const shop = getShopDomain();
 
   // ✅ Theme から叩くのは「App Proxy(JSON)」だけ！
-  // 例: app/routes/apps.delivery-date.policy.jsx → /apps/delivery-date/policy
   const POLICY_URL = shop
     ? `/apps/delivery-date/policy?shop=${encodeURIComponent(shop)}`
     : "/apps/delivery-date/policy";
@@ -219,14 +219,31 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
 
   // ==========================
   // cart signature (変化検知)
+  // ✅ itemsだけでなく attributes も含める（配送日変更も検知）
   // ==========================
+  function stableStringify(obj) {
+    try {
+      if (!obj || typeof obj !== "object") return "";
+      const keys = Object.keys(obj).sort();
+      const out = {};
+      keys.forEach((k) => (out[k] = obj[k]));
+      return JSON.stringify(out);
+    } catch {
+      return "";
+    }
+  }
+
   function cartSignature(cart) {
     const items = (cart && cart.items) || [];
     const parts = items
       .map((it) => `${Number(it?.product_id) || 0}:${Number(it?.quantity) || 0}`)
       .filter((s) => !s.startsWith("0:"))
-      .sort(); // 順序ブレ対策
-    return parts.join("|");
+      .sort();
+
+    const attrs = (cart && cart.attributes) || {};
+    const attrsSig = stableStringify(attrs);
+
+    return `${parts.join("|")}#A:${attrsSig}`;
   }
   let lastCartSig = null;
 
@@ -334,8 +351,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
           const url = new URL(POLICY_URL, location.origin);
           if (productIdsCsv) url.searchParams.set("product_ids", productIdsCsv);
 
-          console.log("[delivery] POLICY_URL =", url.toString());
-
           const res = await fetch(url.toString(), {
             credentials: "same-origin",
             headers: { Accept: "application/json" },
@@ -343,10 +358,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
 
           const ct = res.headers.get("content-type") || "";
           const text = await res.text();
-
-          console.log("[delivery] policy status =", res.status);
-          console.log("[delivery] policy content-type =", ct);
-          console.log("[delivery] policy head =", text.slice(0, 120));
 
           if (!res.ok) throw new Error(`policy fetch failed: ${res.status}`);
           if (!ct.includes("application/json")) throw new Error(`Non-JSON response (content-type=${ct})`);
@@ -783,7 +794,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
       console.warn("[delivery-date] refreshSettingsAndApplyToAllRoots failed", e);
     } finally {
       window.__deliveryRefreshingPolicy = false;
-      // ✅ ここで必ず戻す（ただし自分で出したときだけ）
       if (didShowLoading) setAllRootsLoading(false);
     }
   }
@@ -798,10 +808,14 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
 
       try {
         const url = String(args?.[0] || "");
-        if (url.includes("/cart/clear") || url.includes("/cart/change") || url.includes("/cart/update") || url.includes("/cart/add")) {
+        if (
+          url.includes("/cart/clear") ||
+          url.includes("/cart/change") ||
+          url.includes("/cart/update") ||
+          url.includes("/cart/add")
+        ) {
           setTimeout(() => {
             runCartEmptyCleanup().catch(() => {});
-            // ✅ カート操作時だけ「読み込み中」を許可（ただし変化がないなら何も起きない）
             refreshSettingsAndApplyToAllRoots({ showLoading: true }).catch(() => {});
           }, 250);
         }
@@ -817,7 +831,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
 
     setInterval(() => {
       runCartEmptyCleanup().catch(() => {});
-      // ✅ ポーリングは“裏で確認”だけ（変化がなければ何もしない＆読み込み中も出さない）
       refreshSettingsAndApplyToAllRoots({ showLoading: false }).catch(() => {});
     }, 5000);
   }
@@ -828,7 +841,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
   function initOne(root) {
     if (!root) return;
 
-    // 読み込み要素を事前生成（後段でガタつかない）
     ensureLoadingEl(root);
 
     const refs = root.__deliveryRefs;
@@ -992,7 +1004,11 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
         }
 
         if (noticeEl && used.noticeText) {
-          noticeEl.textContent = String(used.noticeText).split("${MIN_DATE}").join(minYmd).split("${MAX_DATE}").join(maxYmd);
+          noticeEl.textContent = String(used.noticeText)
+            .split("${MIN_DATE}")
+            .join(minYmd)
+            .split("${MAX_DATE}")
+            .join(maxYmd);
         } else if (noticeEl) {
           noticeEl.textContent = "";
         }
@@ -1072,6 +1088,12 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
         saving = true;
         try {
           await cartUpdateAttributes(attrs);
+          // 保存後の状態でシグネチャを更新（余計な再適用を抑制）
+          try {
+            const cart = await cartGet();
+            const sig = cartSignature(cart);
+            if (sig) lastCartSig = sig;
+          } catch {}
         } finally {
           saving = false;
         }
@@ -1269,7 +1291,6 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
       };
 
       const applyRemote = async (remote) => {
-        // ✅ applyRemoteの間も読み込み中（確実に解除するため try/finally）
         setDeliveryLoading(root, true);
 
         try {
@@ -1458,7 +1479,7 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
       })().catch(() => {});
 
       (async () => {
-        // ✅ 初回は読み込み中を表示
+        // 初回は読み込み中を表示
         setDeliveryLoading(root, true);
         try {
           const remote = normalizeRemoteSettings(await loadRemoteSettingsOnce());
