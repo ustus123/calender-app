@@ -355,7 +355,7 @@ export default function DeliveryHowtoRoute() {
                 <Text as="p">
                   <strong>■ 注文状況ページに設置</strong>
                   <br />
-                  注文状況ページの編集画面を開き、追加画面内の「アプリ」から本アプリのブロックを追加し、保存（Save）してください。
+                  お客様アカウントの編集画面を開き、上のメニューから「注文状況」をクリック。追加画面内の「アプリ」から本アプリのブロックを追加し、保存（Save）してください。
                 </Text>
 
                 <InlineStack align="end">
@@ -364,7 +364,7 @@ export default function DeliveryHowtoRoute() {
                     external
                     disabled={!orderStatusEditorLink}
                   >
-                    注文状況ページの編集画面を開く
+                    お客様アカウントの編集画面を開く
                   </Button>
                 </InlineStack>
               </BlockStack>

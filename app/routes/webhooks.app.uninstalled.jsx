@@ -1,16 +1,25 @@
-import { authenticate } from "../shopify.server";
+// webhooks.app.uninstalled.jsx
+
 import db from "../db.server";
+import { verifyShopifyWebhookHmac } from "../utils/verifyShopifyWebhook.server";
 
 export const action = async ({ request }) => {
-  const { shop, session, topic } = await authenticate.webhook(request);
+  const rawBody = Buffer.from(await request.arrayBuffer());
+  const hmacHeader = request.headers.get("x-shopify-hmac-sha256") || "";
+  const secret = process.env.SHOPIFY_API_SECRET || "";
 
-  console.log(`Received ${topic} webhook for ${shop}`);
+  const v = verifyShopifyWebhookHmac({ rawBody, hmacHeader, secret });
+  if (!v.ok) return new Response("Unauthorized", { status: 401 });
 
-  // Webhook requests can trigger multiple times and after an app has already been uninstalled.
-  // If this webhook already ran, the session may have been deleted previously.
-  if (session) {
+  const topic = request.headers.get("x-shopify-topic") || "APP_UNINSTALLED";
+  const shop = request.headers.get("x-shopify-shop-domain") || "";
+
+  console.log(`Received ${topic} webhook for ${shop || "(unknown shop)"}`);
+
+  // uninstall は shop が取れないと消せないので、取れなければ 200 で終了
+  if (shop) {
     await db.session.deleteMany({ where: { shop } });
   }
 
-  return new Response();
+  return new Response("ok", { status: 200 });
 };

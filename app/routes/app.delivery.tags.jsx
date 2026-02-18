@@ -41,8 +41,29 @@ function arrayToLines(arr) {
   return (arr || []).join("\n");
 }
 function normalizeTimeSlots(lines) {
-  const re = /^\d{2}:\d{2}-\d{2}:\d{2}$/;
-  return splitLinesToArray(lines).filter((s) => re.test(s));
+  // 文言は絶対に変更しない前提：
+  // - HH:mm-HH:mm も許可
+  // - 「午前」「午後」「午前中」など文言も許可
+  // - 全角チルダ/波ダッシュ/ハイフン揺れも許可（値は変更しない＝そのまま保存）
+  const arr = splitLinesToArray(lines);
+
+  const allowedText = new Set(["午前", "午後", "午前中"]);
+
+  const reRange = /^\d{1,2}:\d{2}\s*[-ー–—〜～]\s*\d{1,2}:\d{2}$/;
+
+  const out = [];
+  const seen = new Set();
+
+  for (const s of arr) {
+    // 既定の文言はそのまま許可（変更しない）
+    const ok = allowedText.has(s) || reRange.test(s);
+
+    if (!ok) continue; // 許可されない行だけ落とす（文言は改変しない）
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
 }
 function uniqStrings(arr) {
   const out = [];
@@ -62,7 +83,7 @@ function toIntOrUndef(v) {
   return Number.isFinite(n) ? Math.trunc(n) : undefined;
 }
 function toBool(v) {
-  return v === true;
+  return v === true || v === "true";
 }
 
 // ✅ UI専用の安定ID（key用）
@@ -132,7 +153,8 @@ function ensureOverrideShape(rule) {
   const tag = typeof r.tag === "string" ? r.tag : "";
   const ov = r.override && typeof r.override === "object" && !Array.isArray(r.override) ? r.override : {};
 
-  const carrierPreset = typeof ov.carrierPreset === "string" ? ov.carrierPreset : "yamato";
+  const carrierPresetRaw = typeof ov.carrierPreset === "string" ? ov.carrierPreset : "yamato";
+  const carrierPreset = CARRIER_OPTIONS.some((o) => o.value === carrierPresetRaw) ? carrierPresetRaw : "yamato";
   const timeSlots = Array.isArray(ov.timeSlots) ? ov.timeSlots : [];
 
   return {
@@ -520,7 +542,7 @@ export default function DeliveryTagsRoute() {
                               onChange={(v) => updateOverride(idx, { customTimeSlotsLines: v })}
                               multiline={6}
                               autoComplete="off"
-                              helpText="HH:mm-HH:mm 形式の行だけ保存されます"
+                              helpText=""
                             />
                           ) : (
                             <TextField

@@ -1,6 +1,8 @@
-import { authenticate } from "../shopify.server";
+// webhooks.orders-create.jsx
+
 import { getOrCreateDeliverySettings } from "../models/deliverySettings.server";
 import prisma from "../db.server";
+import { verifyShopifyWebhookHmac } from "../utils/verifyShopifyWebhook.server";
 
 /** JSON安全 */
 function safeJsonArray(str) {
@@ -165,7 +167,7 @@ async function setOrderMetafields({
   deliveryDate,
   deliveryTime,
   deliveryPlacement,
-  invalidReason, // null or string
+  invalidReason,
 }) {
   const mutation = `
     mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
@@ -178,36 +180,11 @@ async function setOrderMetafields({
 
   const ownerId = `gid://shopify/Order/${orderId}`;
 
-  // 空欄でも保存したいので "" を入れる（Flow等で条件分岐しやすい）
   const metafields = [
-    {
-      namespace,
-      key: dateKey,
-      type: "single_line_text_field",
-      ownerId,
-      value: String(deliveryDate || ""),
-    },
-    {
-      namespace,
-      key: timeKey,
-      type: "single_line_text_field",
-      ownerId,
-      value: String(deliveryTime || ""),
-    },
-    {
-      namespace,
-      key: placementKey,
-      type: "single_line_text_field",
-      ownerId,
-      value: String(deliveryPlacement || ""),
-    },
-    {
-      namespace,
-      key: invalidReasonKey,
-      type: "single_line_text_field",
-      ownerId,
-      value: String(invalidReason || ""),
-    },
+    { namespace, key: dateKey, type: "single_line_text_field", ownerId, value: String(deliveryDate || "") },
+    { namespace, key: timeKey, type: "single_line_text_field", ownerId, value: String(deliveryTime || "") },
+    { namespace, key: placementKey, type: "single_line_text_field", ownerId, value: String(deliveryPlacement || "") },
+    { namespace, key: invalidReasonKey, type: "single_line_text_field", ownerId, value: String(invalidReason || "") },
   ];
 
   const json = await shopifyGraphql({
@@ -217,24 +194,46 @@ async function setOrderMetafields({
   });
 
   const errs = json?.data?.metafieldsSet?.userErrors || [];
-  if (errs.length) throw new Error("metafieldsSet userErrors: " + JSON.stringify(errs));
+  if (errs.length) {
+    throw new Error("metafieldsSet userErrors: " + JSON.stringify(errs));
+  }
   return true;
 }
 
+function parseJson(rawBodyBuffer) {
+  try {
+    return JSON.parse(rawBodyBuffer.toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 export const action = async ({ request }) => {
-  const { topic, shop, payload } = await authenticate.webhook(request);
+  // ✅ Step 5：raw bytesでHMAC検証
+  const rawBody = Buffer.from(await request.arrayBuffer());
+  const hmacHeader = request.headers.get("x-shopify-hmac-sha256") || "";
+  const secret = process.env.SHOPIFY_API_SECRET || "";
+
+  const v = verifyShopifyWebhookHmac({ rawBody, hmacHeader, secret });
+  if (!v.ok) return new Response("Unauthorized", { status: 401 });
+
+  const topic = request.headers.get("x-shopify-topic") || "";
+  const shop = request.headers.get("x-shopify-shop-domain") || "";
+
+  const payload = parseJson(rawBody);
+  if (!payload) return new Response("Bad Request", { status: 400 });
 
   console.log("[WEBHOOK RECEIVED]", { topic, shop, orderId: payload?.id });
   if (topic !== "ORDERS_CREATE") return new Response("ok", { status: 200 });
 
+  if (!shop) return new Response("Bad Request", { status: 400 });
+
   const settings = await getOrCreateDeliverySettings(shop);
 
-  // ✅ 属性名（DBに合わせる）
   const attrDateName = safeStr(settings.attrDateName || "delivery_date");
   const attrTimeName = safeStr(settings.attrTimeName || "delivery_time");
   const attrPlacementName = safeStr(settings.attrPlacementName || "delivery_placement");
 
-  // ✅ メタフィールド保存（DB）
   const saveToOrderMetafields = Boolean(settings.saveToOrderMetafields);
   const metafieldNamespace = safeStr(settings.metafieldNamespace || "custom");
   const metafieldDateKey = safeStr(settings.metafieldDateKey || "delivery_date");
@@ -242,29 +241,24 @@ export const action = async ({ request }) => {
   const metafieldPlacementKey = safeStr(settings.metafieldPlacementKey || "delivery_placement");
   const metafieldInvalidReasonKey = "delivery_invalid_reason";
 
-  // ✅ 候補（DB） ※現仕様では「範囲外のみ」判定に使う
   const holidays = safeJsonArray(settings.holidaysJson);
   const blackoutDates = safeJsonArray(settings.blackoutJson);
 
-  // ✅ 配送希望（note_attributes から attr名で拾う）
   const deliveryDate = safeStr(getNoteAttr(payload, attrDateName));
   const deliveryTime = safeStr(getNoteAttr(payload, attrTimeName));
   const deliveryPlacement = safeStr(getNoteAttr(payload, attrPlacementName));
 
-  // ---- エラー条件：選択可能範囲外だけ ----
-  // ※ 日付が空・形式不正・休日/不可日は「エラーにしない」
   let invalidReason = null;
 
   if (deliveryDate) {
     const leadTimeDays = Number(settings.leadTimeDays || 1);
     const rangeDays = Number(settings.rangeDays || 30);
-    const cutoffTime = safeStr(settings.cutoffTime || ""); // ""なら考慮しない
+    const cutoffTime = safeStr(settings.cutoffTime || "");
 
     const now = new Date();
     let min = new Date(now);
     min.setHours(0, 0, 0, 0);
 
-    // cutoffTime が設定されているときだけ考慮
     if (cutoffTime) {
       const { h: cutH, m: cutM } = parseHHmm(cutoffTime);
       const cutoff = new Date(now);
@@ -280,19 +274,15 @@ export const action = async ({ request }) => {
     const minStr = formatDateYYYYMMDD(min);
     const maxStr = formatDateYYYYMMDD(max);
 
-    // ★この条件だけでエラー
     if (deliveryDate < minStr || deliveryDate > maxStr) {
       invalidReason = "out_of_range";
     } else {
-      // 休日/不可日はエラーにしない要件なので、ここではチェックのみ（未使用）
-      // const disabled = buildDisabledSet({ startDate: min, endDate: max, holidays, blackoutDates });
-      // if (disabled.has(deliveryDate)) invalidReason = "disabled_date";
       void holidays;
       void blackoutDates;
+      void buildDisabledSet;
     }
   }
 
-  // ✅ メタフィールド保存（必要なら）
   if (saveToOrderMetafields) {
     try {
       await setOrderMetafields({
@@ -306,7 +296,7 @@ export const action = async ({ request }) => {
         deliveryDate,
         deliveryTime,
         deliveryPlacement,
-        invalidReason, // out_of_range のときだけ入る
+        invalidReason,
       });
       console.log("[metafieldsSet] saved", {
         orderId: payload.id,
@@ -320,7 +310,6 @@ export const action = async ({ request }) => {
     }
   }
 
-  // ---- エラー時だけ：メモ & タグ（固定文言）----
   if (invalidReason === "out_of_range") {
     console.warn(`[ORDERS_CREATE] ${shop} delivery date out of range`, {
       deliveryDate,
@@ -345,6 +334,5 @@ export const action = async ({ request }) => {
     }
   }
 
-  // OK時は静かに終了（メモもタグも付けない）
   return new Response("ok", { status: 200 });
 };

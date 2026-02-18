@@ -74,9 +74,9 @@ ${SELECTOR}.is-loading { pointer-events: none; opacity: .65; }
   const shop = getShopDomain();
 
   // ✅ Theme から叩くのは「App Proxy(JSON)」だけ！
-  const POLICY_URL = shop
-    ? `/apps/delivery-date/policy?shop=${encodeURIComponent(shop)}`
-    : "/apps/delivery-date/policy";
+const POLICY_URL = shop
+  ? `/apps/delivery-date?shop=${encodeURIComponent(shop)}`
+  : "/apps/delivery-date";
 
   let settingsPromise = null;
 
